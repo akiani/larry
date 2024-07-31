@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LarryGPT Evaluation</title>
+    <style>
+        body {
+            font-family: 'Consolas', 'Monaco', 'Lucida Console', 'Liberation Mono', 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Courier New', monospace;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 10px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-size: 10px;
+            line-height: 1.4;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 98vh;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid #3e3e3e;
+        }
+        h1 {
+            font-size: 18px;
+            margin: 0;
+            color: #569cd6;
+        }
+        .navigation {
+            display: flex;
+        }
+        button {
+            background-color: #3e3e3e;
+            color: #d4d4d4;
+            border: none;
+            padding: 5px 10px;
+            margin-left: 5px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        button:hover {
+            background-color: #505050;
+        }
+        button:disabled {
+            background-color: #2d2d2d;
+            color: #6d6d6d;
+            cursor: not-allowed;
+        }
+        #prompt {
+            background-color: #252526;
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 3px solid #569cd6;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        #outputContainer {
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        .model-output {
+            margin: 5px 0;
+            background-color: #252526;
+            padding: 10px;
+            border-left: 3px solid #4ec9b0;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+        }
+        .model-name {
+            color: #4ec9b0;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .error-message {
+            color: #f44747;
+        }
+        #status {
+            color: #ce9178;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>LarryGPT Evaluation</h1>
+            <div class="navigation">
+                <button id="prevBtn" onclick="navigate(-1)">◀ Prev</button>
+                <button id="nextBtn" onclick="navigate(1)">Next ▶</button>
+            </div>
+        </div>
+        <div id="status">Loading model data...</div>
+        <div id="prompt"></div>
+        <div id="outputContainer"></div>
+    </div>
+
+    <script>
+        const modelConfigs = [
+            { path: 'larry_david_valid.jsonl', name: 'GPT-4o' },    
+            { path: 'gpt-3.5-turbo_scrape.jsonl', name: 'GPT-3.5' },
+            { path: 'scrape_gpt-3.5-ft.jsonl', name: 'GPT-3.5-Finetuned' },
+            { path: 'llama_3.1_scrape.jsonl', name: 'Llama-3.1-8B' },
+            { path: 'llama_3.1_ft_scrape.jsonl', name: 'Llama-3.1-8B-Finetuned' }
+        ];
+
+        let modelData = [];
+        let currentIndex = 0;
+
+        function loadModelData(config) {
+            return fetch(config.path)
+                .then(response => response.text())
+                .then(contents => {
+                    const lines = contents.split('\n').filter(line => line.trim() !== '');
+                    return lines.map(line => {
+                        try {
+                            return JSON.parse(line);
+                        } catch (error) {
+                            console.error('Error parsing JSON:', error);
+                            return { error: 'Invalid JSON', rawData: line };
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading file:', error);
+                    return [{ error: 'Failed to load file', rawData: '' }];
+                });
+        }
+
+        function initializeUI() {
+            Promise.all(modelConfigs.map(loadModelData))
+                .then(results => {
+                    modelData = results;
+                    currentIndex = parseInt(new URLSearchParams(window.location.search).get('index')) || 0;
+                    updateUI();
+                });
+        }
+
+        function updateUI() {
+            const outputContainer = document.getElementById('outputContainer');
+            const promptContainer = document.getElementById('prompt');
+            outputContainer.innerHTML = '';
+            promptContainer.innerHTML = '';
+            
+            if (modelData.filter(Boolean).length === 0) {
+                document.getElementById('status').textContent = 'No model data available';
+                return;
+            }
+
+            document.getElementById('status').textContent = '';
+
+            const firstModelData = modelData.find(Boolean);
+            if (!firstModelData || !firstModelData[currentIndex]) {
+                document.getElementById('status').textContent = 'No data available for the current index';
+                return;
+            }
+
+            const userPrompt = firstModelData[currentIndex].messages?.find(msg => msg.role === "user")?.content || "Unable to retrieve user prompt";
+            promptContainer.innerHTML = `<b>User Prompt:</b><pre>${userPrompt}</pre>`;
+
+            modelData.forEach((data, index) => {
+                if (data && currentIndex < data.length) {
+                    const modelOutput = document.createElement('div');
+                    modelOutput.className = 'model-output';
+                    modelOutput.innerHTML = `<div class="model-name">${modelConfigs[index].name}</div>${formatOutput(data[currentIndex])}`;
+                    outputContainer.appendChild(modelOutput);
+                }
+            });
+
+            document.getElementById('prevBtn').disabled = currentIndex === 0;
+            document.getElementById('nextBtn').disabled = currentIndex === Math.min(...modelData.filter(Boolean).map(d => d.length - 1));
+
+            // Update URL
+            const url = new URL(window.location);
+            url.searchParams.set('index', currentIndex);
+            window.history.pushState({}, '', url);
+        }
+
+        function formatOutput(data) {
+            if (data.error) {
+                return `<p class="error-message">Error: Model output does not comply with the expected format.</p><pre>${escapeHtml(data.rawData)}</pre>`;
+            }
+
+            const assistantMessage = data.messages?.find(msg => msg.role === "assistant");
+            if (assistantMessage) {
+                try {
+                    const content = JSON.parse(assistantMessage.content);
+                    return `<pre>${content.map(item => `${item.text} (${item.emotion})`).join('\n')}</pre>`;
+                } catch (error) {
+                    console.error('Error parsing assistant message:', error);
+                    return `<p class="error-message">Error: Unable to parse model output.</p><pre>${escapeHtml(assistantMessage.content)}</pre>`;
+                }
+            }
+            return "<p>No assistant message found.</p>";
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function navigate(direction) {
+            currentIndex += direction;
+            updateUI();
+        }
+
+        window.addEventListener('popstate', function(event) {
+            currentIndex = parseInt(new URLSearchParams(window.location.search).get('index')) || 0;
+            updateUI();
+        });
+
+        initializeUI();
+    </script>
+</body>
+</html>
