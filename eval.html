@@ -12,7 +12,7 @@
             padding: 10px;
             background-color: #1e1e1e;
             color: #d4d4d4;
-            font-size: 10px;
+            font-size: 14px;
             line-height: 1.4;
         }
         .container {
@@ -70,6 +70,14 @@
             background-color: #252526;
             padding: 10px;
             border-left: 3px solid #4ec9b0;
+        }
+        .model-pair {
+            display: flex;
+            margin: 5px 0;
+        }
+        .model-pair .model-output {
+            flex: 1;
+            margin: 0 5px;
         }
         pre {
             white-space: pre-wrap;
@@ -165,16 +173,35 @@
             }
 
             const userPrompt = firstModelData[currentIndex].messages?.find(msg => msg.role === "user")?.content || "Unable to retrieve user prompt";
-            promptContainer.innerHTML = `<b>User Prompt:</b><pre>${userPrompt}</pre>`;
+            promptContainer.innerHTML = `<strong>User Prompt:</strong><pre>${userPrompt}</pre>`;
 
-            modelData.forEach((data, index) => {
-                if (data && currentIndex < data.length) {
-                    const modelOutput = document.createElement('div');
-                    modelOutput.className = 'model-output';
-                    modelOutput.innerHTML = `<div class="model-name">${modelConfigs[index].name}</div>${formatOutput(data[currentIndex])}`;
-                    outputContainer.appendChild(modelOutput);
+            // GPT-4 output
+            if (modelData[0] && currentIndex < modelData[0].length) {
+                const gpt4Output = document.createElement('div');
+                gpt4Output.className = 'model-output';
+                gpt4Output.innerHTML = `<div class="model-name">${modelConfigs[0].name}</div>${formatOutput(modelData[0][currentIndex])}`;
+                outputContainer.appendChild(gpt4Output);
+            }
+
+            // GPT-3.5 and Llama side-by-side
+            for (let i = 1; i < modelData.length; i += 2) {
+                if (i + 1 < modelData.length) {
+                    const modelPair = document.createElement('div');
+                    modelPair.className = 'model-pair';
+
+                    const baseModel = document.createElement('div');
+                    baseModel.className = 'model-output';
+                    baseModel.innerHTML = `<div class="model-name">${modelConfigs[i].name}</div>${formatOutput(modelData[i][currentIndex])}`;
+
+                    const fineTunedModel = document.createElement('div');
+                    fineTunedModel.className = 'model-output';
+                    fineTunedModel.innerHTML = `<div class="model-name">${modelConfigs[i+1].name}</div>${formatOutput(modelData[i+1][currentIndex])}`;
+
+                    modelPair.appendChild(baseModel);
+                    modelPair.appendChild(fineTunedModel);
+                    outputContainer.appendChild(modelPair);
                 }
-            });
+            }
 
             document.getElementById('prevBtn').disabled = currentIndex === 0;
             document.getElementById('nextBtn').disabled = currentIndex === Math.min(...modelData.filter(Boolean).map(d => d.length - 1));
